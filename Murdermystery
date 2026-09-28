@@ -1,0 +1,1853 @@
+--==================================================
+-- MARQUIS SCRIPTS V2.0
+--==================================================
+
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+
+local plr = Players.LocalPlayer
+
+local esp = false
+local xray = false
+local lockOn = false
+local notifyGunDropped = true
+
+local hitboxSize = 4
+local cameraFOV = 70
+local walkSpeed = 16
+
+local highlights = {}
+local boxes = {}
+local nameTags = {}
+local target = nil
+
+local gunESPHighlight = nil
+local gunESPBox = nil
+local gunESPName = nil
+local lastGun = nil
+
+--==================================================
+-- GUI
+--==================================================
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "MarquisScripts"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.Parent = plr:WaitForChild("PlayerGui")
+
+--==================================================
+-- NOTIFICATION
+--==================================================
+
+local notification = Instance.new("Frame")
+notification.Size = UDim2.fromOffset(285,55)
+notification.Position = UDim2.new(0,15,1,-70)
+notification.BackgroundColor3 = Color3.fromRGB(7,24,58)
+notification.BorderSizePixel = 0
+notification.Visible = false
+notification.ZIndex = 200
+notification.Parent = gui
+
+local notificationCorner = Instance.new("UICorner")
+notificationCorner.CornerRadius = UDim.new(0,10)
+notificationCorner.Parent = notification
+
+local notificationStroke = Instance.new("UIStroke")
+notificationStroke.Color = Color3.fromRGB(90,155,255)
+notificationStroke.Thickness = 1.5
+notificationStroke.Transparency = .2
+notificationStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+notificationStroke.Parent = notification
+
+local notificationText = Instance.new("TextLabel")
+notificationText.Size = UDim2.new(1,-20,1,-10)
+notificationText.Position = UDim2.fromOffset(10,5)
+notificationText.BackgroundTransparency = 1
+notificationText.Text = ""
+notificationText.TextColor3 = Color3.fromRGB(240,245,255)
+notificationText.TextSize = 12
+notificationText.Font = Enum.Font.GothamMedium
+notificationText.TextWrapped = true
+notificationText.TextXAlignment = Enum.TextXAlignment.Left
+notificationText.TextYAlignment = Enum.TextYAlignment.Center
+notificationText.ZIndex = 201
+notificationText.Parent = notification
+
+local notificationNumber = 0
+
+local function showNotification(message)
+
+	notificationNumber += 1
+	local current = notificationNumber
+
+	notificationText.Text = message
+	notification.Visible = true
+
+	notification.BackgroundTransparency = 1
+	notificationText.TextTransparency = 1
+
+	TweenService:Create(
+		notification,
+		TweenInfo.new(.2),
+		{BackgroundTransparency = 0}
+	):Play()
+
+	TweenService:Create(
+		notificationText,
+		TweenInfo.new(.2),
+		{TextTransparency = 0}
+	):Play()
+
+	task.delay(2,function()
+
+		if current ~= notificationNumber then
+			return
+		end
+
+		local fadeFrame = TweenService:Create(
+			notification,
+			TweenInfo.new(.25),
+			{BackgroundTransparency = 1}
+		)
+
+		local fadeText = TweenService:Create(
+			notificationText,
+			TweenInfo.new(.25),
+			{TextTransparency = 1}
+		)
+
+		fadeFrame:Play()
+		fadeText:Play()
+
+		fadeFrame.Completed:Wait()
+
+		if current == notificationNumber then
+			notification.Visible = false
+		end
+
+	end)
+end
+
+--==================================================
+-- LOADING SCREEN
+--==================================================
+
+local loading = Instance.new("Frame")
+loading.Size = UDim2.fromScale(1,1)
+loading.BackgroundColor3 = Color3.fromRGB(3,10,28)
+loading.BorderSizePixel = 0
+loading.ZIndex = 100
+loading.Parent = gui
+
+local loadTitle = Instance.new("TextLabel")
+loadTitle.Size = UDim2.fromOffset(500,60)
+loadTitle.Position = UDim2.fromScale(.5,.42)
+loadTitle.AnchorPoint = Vector2.new(.5,.5)
+loadTitle.BackgroundTransparency = 1
+loadTitle.Text = "MARQUIS SCRIPTS"
+loadTitle.TextColor3 = Color3.new(1,1,1)
+loadTitle.TextSize = 32
+loadTitle.Font = Enum.Font.GothamBold
+loadTitle.ZIndex = 101
+loadTitle.Parent = loading
+
+local subtitle = Instance.new("TextLabel")
+subtitle.Size = UDim2.fromOffset(500,30)
+subtitle.Position = UDim2.fromScale(.5,.49)
+subtitle.AnchorPoint = Vector2.new(.5,.5)
+subtitle.BackgroundTransparency = 1
+subtitle.Text = "INITIALIZING..."
+subtitle.TextColor3 = Color3.fromRGB(170,195,235)
+subtitle.TextSize = 13
+subtitle.Font = Enum.Font.Gotham
+subtitle.ZIndex = 101
+subtitle.Parent = loading
+
+local barBack = Instance.new("Frame")
+barBack.Size = UDim2.fromOffset(360,8)
+barBack.Position = UDim2.fromScale(.5,.55)
+barBack.AnchorPoint = Vector2.new(.5,.5)
+barBack.BackgroundColor3 = Color3.fromRGB(20,43,80)
+barBack.BorderSizePixel = 0
+barBack.ZIndex = 101
+barBack.Parent = loading
+
+local barCorner = Instance.new("UICorner")
+barCorner.CornerRadius = UDim.new(1,0)
+barCorner.Parent = barBack
+
+local bar = Instance.new("Frame")
+bar.Size = UDim2.new(0,0,1,0)
+bar.BackgroundColor3 = Color3.fromRGB(255,255,255)
+bar.BorderSizePixel = 0
+bar.ZIndex = 102
+bar.Parent = barBack
+
+local barCorner2 = Instance.new("UICorner")
+barCorner2.CornerRadius = UDim.new(1,0)
+barCorner2.Parent = bar
+
+local percentage = Instance.new("TextLabel")
+percentage.Size = UDim2.fromOffset(100,25)
+percentage.Position = UDim2.fromScale(.5,.60)
+percentage.AnchorPoint = Vector2.new(.5,.5)
+percentage.BackgroundTransparency = 1
+percentage.Text = "0%"
+percentage.TextColor3 = Color3.fromRGB(190,210,245)
+percentage.TextSize = 12
+percentage.Font = Enum.Font.Gotham
+percentage.ZIndex = 101
+percentage.Parent = loading
+
+task.spawn(function()
+
+	for i = 0,100 do
+
+		bar.Size = UDim2.new(i/100,0,1,0)
+		percentage.Text = i .. "%"
+
+		if i < 30 then
+			subtitle.Text = "INITIALIZING..."
+		elseif i < 60 then
+			subtitle.Text = "LOADING FEATURES..."
+		elseif i < 90 then
+			subtitle.Text = "SETTING THINGS UP..."
+		else
+			subtitle.Text = "ALMOST READY..."
+		end
+
+		task.wait(.06)
+	end
+
+	task.wait(1)
+
+	local fadeInfo = TweenInfo.new(
+		.8,
+		Enum.EasingStyle.Quad,
+		Enum.EasingDirection.Out
+	)
+
+	for _,v in ipairs(loading:GetDescendants()) do
+
+		if v:IsA("TextLabel") then
+
+			TweenService:Create(
+				v,
+				fadeInfo,
+				{TextTransparency = 1}
+			):Play()
+
+		elseif v:IsA("Frame") then
+
+			TweenService:Create(
+				v,
+				fadeInfo,
+				{BackgroundTransparency = 1}
+			):Play()
+
+		end
+	end
+
+	TweenService:Create(
+		loading,
+		TweenInfo.new(1),
+		{BackgroundTransparency = 1}
+	):Play()
+
+	task.wait(1)
+
+	loading:Destroy()
+
+end)
+
+--==================================================
+-- MAIN MENU
+--==================================================
+
+local menu = Instance.new("Frame")
+
+menu.Size = UDim2.fromOffset(255,270)
+menu.Position = UDim2.fromScale(.05,.2)
+
+menu.BackgroundColor3 = Color3.fromRGB(7,24,58)
+menu.BorderSizePixel = 0
+menu.Active = true
+menu.ClipsDescendants = true
+menu.Parent = gui
+
+local menuCorner = Instance.new("UICorner")
+menuCorner.CornerRadius = UDim.new(0,12)
+menuCorner.Parent = menu
+
+--==================================================
+-- MENU OUTLINE
+--==================================================
+
+local menuOutline = Instance.new("UIStroke")
+
+menuOutline.Name = "MenuOutline"
+menuOutline.Color = Color3.fromRGB(0,0,0)
+menuOutline.Thickness = 3
+menuOutline.Transparency = 0
+menuOutline.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+menuOutline.Parent = menu
+
+--==================================================
+-- TOP BAR
+--==================================================
+
+local top = Instance.new("Frame")
+
+top.Size = UDim2.new(1,0,0,48)
+top.BackgroundColor3 = Color3.fromRGB(10,39,88)
+top.BorderSizePixel = 0
+top.Active = true
+top.ZIndex = 10
+top.Parent = menu
+
+local topCorner = Instance.new("UICorner")
+topCorner.CornerRadius = UDim.new(0,12)
+topCorner.Parent = top
+
+local accent = Instance.new("Frame")
+accent.Size = UDim2.new(1,0,0,3)
+accent.Position = UDim2.fromOffset(0,45)
+accent.BackgroundColor3 = Color3.fromRGB(255,255,255)
+accent.BorderSizePixel = 0
+accent.ZIndex = 11
+accent.Parent = top
+
+--==================================================
+-- TITLE
+--==================================================
+
+local title = Instance.new("TextLabel")
+
+title.Size = UDim2.new(1,-25,0,23)
+title.Position = UDim2.fromOffset(14,3)
+title.BackgroundTransparency = 1
+title.Text = "MARQUIS SCRIPTS"
+title.TextColor3 = Color3.new(1,1,1)
+title.TextSize = 17
+title.Font = Enum.Font.GothamBold
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.ZIndex = 12
+title.Parent = top
+
+--==================================================
+-- VERSION
+--==================================================
+
+local version = Instance.new("TextLabel")
+
+version.Size = UDim2.new(1,-25,0,15)
+version.Position = UDim2.fromOffset(15,27)
+version.BackgroundTransparency = 1
+version.Text = "VERSION 2.0"
+version.TextColor3 = Color3.fromRGB(145,180,230)
+version.TextSize = 8
+version.Font = Enum.Font.GothamMedium
+version.TextXAlignment = Enum.TextXAlignment.Left
+version.ZIndex = 12
+version.Parent = top
+
+--==================================================
+-- STATUS
+--==================================================
+
+local status = Instance.new("TextLabel")
+
+status.Size = UDim2.new(1,-30,0,22)
+status.Position = UDim2.fromOffset(15,54)
+status.BackgroundTransparency = 1
+status.Text = "●  READY"
+status.TextColor3 = Color3.fromRGB(190,215,255)
+status.TextSize = 11
+status.Font = Enum.Font.GothamMedium
+status.TextXAlignment = Enum.TextXAlignment.Left
+status.ZIndex = 10
+status.Parent = menu
+
+--==================================================
+-- SCROLL AREA
+--==================================================
+
+local scroll = Instance.new("ScrollingFrame")
+
+scroll.Size = UDim2.new(1,-10,1,-82)
+scroll.Position = UDim2.fromOffset(5,78)
+
+scroll.BackgroundTransparency = 1
+scroll.BorderSizePixel = 0
+scroll.CanvasSize = UDim2.fromOffset(0,430)
+
+scroll.ScrollBarThickness = 4
+scroll.ScrollBarImageColor3 = Color3.fromRGB(90,155,255)
+scroll.ScrollBarImageTransparency = .25
+
+scroll.ScrollingDirection = Enum.ScrollingDirection.Y
+scroll.ScrollingEnabled = true
+scroll.Active = true
+scroll.ZIndex = 5
+scroll.Parent = menu
+
+--==================================================
+-- BUTTON BOUNCE
+--==================================================
+
+local function buttonBounce(button)
+
+	local originalSize = button.Size
+	local originalPosition = button.Position
+
+	local shrink = TweenService:Create(
+		button,
+		TweenInfo.new(.07),
+		{
+			Size = UDim2.new(
+				originalSize.X.Scale,
+				originalSize.X.Offset - 6,
+				originalSize.Y.Scale,
+				originalSize.Y.Offset - 4
+			),
+
+			Position = UDim2.new(
+				originalPosition.X.Scale,
+				originalPosition.X.Offset + 3,
+				originalPosition.Y.Scale,
+				originalPosition.Y.Offset + 2
+			)
+		}
+	)
+
+	local bounce = TweenService:Create(
+		button,
+		TweenInfo.new(
+			.18,
+			Enum.EasingStyle.Back,
+			Enum.EasingDirection.Out
+		),
+		{
+			Size = originalSize,
+			Position = originalPosition
+		}
+	)
+
+	shrink:Play()
+
+	shrink.Completed:Once(function()
+		bounce:Play()
+	end)
+end
+
+--==================================================
+-- BUTTON CREATOR
+--==================================================
+
+local function makeButton(text,y)
+
+	local button = Instance.new("TextButton")
+
+	button.Size = UDim2.new(1,-15,0,42)
+	button.Position = UDim2.fromOffset(5,y)
+
+	button.BackgroundColor3 = Color3.fromRGB(12,43,91)
+	button.BorderSizePixel = 0
+
+	button.Text = text
+	button.TextColor3 = Color3.fromRGB(245,248,255)
+	button.TextSize = 13
+	button.Font = Enum.Font.GothamMedium
+	button.TextXAlignment = Enum.TextXAlignment.Left
+
+	button.AutoButtonColor = false
+	button.ZIndex = 6
+	button.Parent = scroll
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0,8)
+	corner.Parent = button
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(75,140,235)
+	stroke.Transparency = .5
+	stroke.Thickness = 1
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	stroke.Parent = button
+
+	local padding = Instance.new("UIPadding")
+	padding.PaddingLeft = UDim.new(0,14)
+	padding.Parent = button
+
+	return button
+end
+
+--==================================================
+-- SLIDER CREATOR
+--==================================================
+
+local function makeSlider(
+	name,
+	y,
+	minValue,
+	maxValue,
+	defaultValue,
+	callback
+)
+
+	local holder = Instance.new("Frame")
+
+	holder.Size = UDim2.new(1,-15,0,55)
+	holder.Position = UDim2.fromOffset(5,y)
+
+	holder.BackgroundColor3 = Color3.fromRGB(12,43,91)
+	holder.BorderSizePixel = 0
+	holder.ZIndex = 6
+	holder.Parent = scroll
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0,8)
+	corner.Parent = holder
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(75,140,235)
+	stroke.Transparency = .5
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	stroke.Parent = holder
+
+	local label = Instance.new("TextLabel")
+
+	label.Size = UDim2.new(1,-25,0,20)
+	label.Position = UDim2.fromOffset(12,4)
+
+	label.BackgroundTransparency = 1
+	label.Text = name .. ": " .. tostring(defaultValue)
+
+	label.TextColor3 = Color3.fromRGB(245,248,255)
+	label.TextSize = 11
+	label.Font = Enum.Font.GothamMedium
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.ZIndex = 7
+	label.Parent = holder
+
+	local sliderBack = Instance.new("Frame")
+
+	sliderBack.Size = UDim2.new(1,-24,0,6)
+	sliderBack.Position = UDim2.fromOffset(12,36)
+
+	sliderBack.BackgroundColor3 = Color3.fromRGB(35,65,110)
+	sliderBack.BorderSizePixel = 0
+	sliderBack.ZIndex = 7
+	sliderBack.Parent = holder
+
+	local sliderCorner = Instance.new("UICorner")
+	sliderCorner.CornerRadius = UDim.new(1,0)
+	sliderCorner.Parent = sliderBack
+
+	local startingPercent =
+		(defaultValue-minValue) /
+		(maxValue-minValue)
+
+	local sliderFill = Instance.new("Frame")
+
+	sliderFill.Size =
+		UDim2.new(startingPercent,0,1,0)
+
+	sliderFill.BackgroundColor3 =
+		Color3.fromRGB(90,155,255)
+
+	sliderFill.BorderSizePixel = 0
+	sliderFill.ZIndex = 8
+	sliderFill.Parent = sliderBack
+
+	local fillCorner = Instance.new("UICorner")
+	fillCorner.CornerRadius = UDim.new(1,0)
+	fillCorner.Parent = sliderFill
+
+	local dragging = false
+
+	local function update(input)
+
+		local percent = math.clamp(
+			(input.Position.X -
+				sliderBack.AbsolutePosition.X)
+			/
+			sliderBack.AbsoluteSize.X,
+			0,
+			1
+		)
+
+		local value =
+			math.floor(
+				minValue +
+				(maxValue-minValue) * percent
+				+ .5
+			)
+
+		sliderFill.Size =
+			UDim2.new(percent,0,1,0)
+
+		label.Text =
+			name .. ": " .. tostring(value)
+
+		callback(value)
+	end
+
+	sliderBack.InputBegan:Connect(function(input)
+
+		if input.UserInputType ==
+			Enum.UserInputType.MouseButton1
+			or input.UserInputType ==
+			Enum.UserInputType.Touch then
+
+			dragging = true
+			update(input)
+		end
+	end)
+
+	UIS.InputChanged:Connect(function(input)
+
+		if not dragging then
+			return
+		end
+
+		if input.UserInputType ==
+			Enum.UserInputType.MouseMovement
+			or input.UserInputType ==
+			Enum.UserInputType.Touch then
+
+			update(input)
+		end
+	end)
+
+	UIS.InputEnded:Connect(function(input)
+
+		if input.UserInputType ==
+			Enum.UserInputType.MouseButton1
+			or input.UserInputType ==
+			Enum.UserInputType.Touch then
+
+			dragging = false
+		end
+	end)
+end
+
+--==================================================
+-- BUTTONS
+--==================================================
+
+local espBtn =
+	makeButton("ESP                         OFF",0)
+
+local xrayBtn =
+	makeButton("X-Ray                       OFF",48)
+
+local aimBtn =
+	makeButton("Aim Lock                 OFF",96)
+
+local gunBtn =
+	makeButton("Get Dropped Gun",144)
+
+local notifyGunBtn =
+	makeButton(
+		"Notify When Gun Dropped    ON",
+		192
+	)
+
+--==================================================
+-- PLAYER ESP
+--==================================================
+
+local function clearESP(player)
+
+	if highlights[player] then
+		highlights[player]:Destroy()
+		highlights[player] = nil
+	end
+
+	if boxes[player] then
+		boxes[player]:Destroy()
+		boxes[player] = nil
+	end
+
+	if nameTags[player] then
+		nameTags[player]:Destroy()
+		nameTags[player] = nil
+	end
+end
+
+local function updateESP(player)
+
+	clearESP(player)
+
+	if not esp or player == plr then
+		return
+	end
+
+	local character = player.Character
+
+	if not character then
+		return
+	end
+
+	local highlight = Instance.new("Highlight")
+
+	highlight.Name = "MarquisESP"
+	highlight.Adornee = character
+
+	highlight.FillColor =
+		Color3.fromRGB(70,150,255)
+
+	highlight.OutlineColor =
+		Color3.fromRGB(255,255,255)
+
+	highlight.FillTransparency = .8
+	highlight.OutlineTransparency = 0
+
+	highlight.DepthMode =
+		xray
+		and Enum.HighlightDepthMode.AlwaysOnTop
+		or Enum.HighlightDepthMode.Occluded
+
+	highlight.Parent = character
+
+	highlights[player] = highlight
+
+	local root =
+		character:FindFirstChild("HumanoidRootPart")
+
+	if not root then
+		return
+	end
+
+	local box =
+		Instance.new("BoxHandleAdornment")
+
+	box.Name = "MarquisHitboxESP"
+	box.Adornee = root
+
+	box.Size = Vector3.new(
+		hitboxSize,
+		hitboxSize * 1.5,
+		hitboxSize / 2
+	)
+
+	box.Color3 =
+		Color3.fromRGB(70,150,255)
+
+	box.Transparency = .35
+	box.AlwaysOnTop = xray
+	box.ZIndex = 5
+	box.Parent = character
+
+	boxes[player] = box
+
+	local head =
+		character:FindFirstChild("Head")
+
+	if head then
+
+		local billboard =
+			Instance.new("BillboardGui")
+
+		billboard.Name = "MarquisESPName"
+		billboard.Adornee = head
+		billboard.Size =
+			UDim2.fromOffset(200,35)
+
+		billboard.StudsOffset =
+			Vector3.new(0,3.2,0)
+
+		billboard.AlwaysOnTop = true
+		billboard.ZIndexBehavior =
+			Enum.ZIndexBehavior.Sibling
+
+		billboard.Parent = head
+
+		local nameLabel =
+			Instance.new("TextLabel")
+
+		nameLabel.Size =
+			UDim2.fromScale(1,1)
+
+		nameLabel.BackgroundTransparency = 1
+		nameLabel.Text = player.Name
+
+		nameLabel.TextColor3 =
+			Color3.fromRGB(255,255,255)
+
+		nameLabel.TextSize = 14
+		nameLabel.Font =
+			Enum.Font.GothamBold
+
+		nameLabel.TextStrokeColor3 =
+			Color3.fromRGB(0,0,0)
+
+		nameLabel.TextStrokeTransparency = .25
+
+		nameLabel.TextXAlignment =
+			Enum.TextXAlignment.Center
+
+		nameLabel.Parent = billboard
+
+		nameTags[player] = billboard
+	end
+end
+
+local function updateAllESP()
+
+	for _,player in ipairs(
+		Players:GetPlayers()
+	) do
+
+		updateESP(player)
+
+	end
+end
+
+--==================================================
+-- GUN ESP
+--==================================================
+
+local function clearGunESP()
+
+	if gunESPHighlight then
+		gunESPHighlight:Destroy()
+		gunESPHighlight = nil
+	end
+
+	if gunESPBox then
+		gunESPBox:Destroy()
+		gunESPBox = nil
+	end
+
+	if gunESPName then
+		gunESPName:Destroy()
+		gunESPName = nil
+	end
+
+	lastGun = nil
+end
+
+local function updateGunESP()
+
+	clearGunESP()
+
+	if not esp then
+		return
+	end
+
+	local gun =
+		workspace:FindFirstChild(
+			"GunDrop",
+			true
+		)
+
+	if not gun then
+		return
+	end
+
+	local gunPart
+
+	if gun:IsA("BasePart") then
+
+		gunPart = gun
+
+	else
+
+		gunPart =
+			gun:FindFirstChildWhichIsA(
+				"BasePart",
+				true
+			)
+
+	end
+
+	if not gunPart then
+		return
+	end
+
+	lastGun = gun
+
+	local highlight =
+		Instance.new("Highlight")
+
+	highlight.Name =
+		"MarquisGunESP"
+
+	highlight.Adornee = gun
+
+	highlight.FillColor =
+		Color3.fromRGB(70,150,255)
+
+	highlight.OutlineColor =
+		Color3.fromRGB(255,255,255)
+
+	highlight.FillTransparency = .55
+	highlight.OutlineTransparency = 0
+
+	highlight.DepthMode =
+		xray
+		and Enum.HighlightDepthMode.AlwaysOnTop
+		or Enum.HighlightDepthMode.Occluded
+
+	highlight.Parent = gun
+
+	gunESPHighlight = highlight
+
+	local box =
+		Instance.new("BoxHandleAdornment")
+
+	box.Name =
+		"MarquisGunBox"
+
+	box.Adornee = gunPart
+
+	box.Size =
+		gunPart.Size +
+		Vector3.new(1,1,1)
+
+	box.Color3 =
+		Color3.fromRGB(70,150,255)
+
+	box.Transparency = .25
+	box.AlwaysOnTop = xray
+	box.ZIndex = 5
+	box.Parent = gunPart
+
+	gunESPBox = box
+
+	local billboard =
+		Instance.new("BillboardGui")
+
+	billboard.Name =
+		"MarquisGunName"
+
+	billboard.Adornee = gunPart
+
+	billboard.Size =
+		UDim2.fromOffset(100,30)
+
+	billboard.StudsOffset =
+		Vector3.new(0,2,0)
+
+	billboard.AlwaysOnTop = true
+	billboard.ZIndexBehavior =
+		Enum.ZIndexBehavior.Sibling
+
+	billboard.Parent = gunPart
+
+	local label =
+		Instance.new("TextLabel")
+
+	label.Size =
+		UDim2.fromScale(1,1)
+
+	label.BackgroundTransparency = 1
+	label.Text = "GUN"
+
+	label.TextColor3 =
+		Color3.fromRGB(255,255,255)
+
+	label.TextSize = 14
+	label.Font =
+		Enum.Font.GothamBold
+
+	label.TextStrokeColor3 =
+		Color3.fromRGB(0,0,0)
+
+	label.TextStrokeTransparency = .2
+
+	label.TextXAlignment =
+		Enum.TextXAlignment.Center
+
+	label.Parent = billboard
+
+	gunESPName = billboard
+end
+
+--==================================================
+-- HITBOX SLIDER
+--==================================================
+
+makeSlider(
+	"Hitbox Size",
+	240,
+	2,
+	10,
+	4,
+	function(value)
+
+		hitboxSize = value
+
+		if esp then
+			updateAllESP()
+		end
+
+	end
+)
+
+--==================================================
+-- FOV SLIDER
+--==================================================
+
+makeSlider(
+	"FOV",
+	300,
+	40,
+	120,
+	70,
+	function(value)
+
+		cameraFOV = value
+
+		local camera =
+			workspace.CurrentCamera
+
+		if camera then
+			camera.FieldOfView = value
+		end
+
+	end
+)
+
+--==================================================
+-- WALKSPEED SLIDER
+--==================================================
+
+makeSlider(
+	"WalkSpeed",
+	360,
+	8,
+	50,
+	16,
+	function(value)
+
+		walkSpeed = value
+
+		local character =
+			plr.Character
+
+		if not character then
+			return
+		end
+
+		local humanoid =
+			character:FindFirstChildOfClass(
+				"Humanoid"
+			)
+
+		if humanoid then
+			humanoid.WalkSpeed = value
+		end
+
+	end
+)
+
+--==================================================
+-- TOGGLE TEXT
+--==================================================
+
+local function setToggleText(button,name,state)
+
+	button.Text =
+		name ..
+		string.rep(
+			" ",
+			math.max(1,25-#name)
+		) ..
+		(state and "ON" or "OFF")
+
+end
+
+--==================================================
+-- ESP BUTTON
+--==================================================
+
+espBtn.MouseButton1Click:Connect(function()
+
+	buttonBounce(espBtn)
+
+	esp = not esp
+
+	setToggleText(
+		espBtn,
+		"ESP",
+		esp
+	)
+
+	updateAllESP()
+	updateGunESP()
+
+	showNotification(
+		esp
+		and "ESP enabled."
+		or "ESP disabled."
+	)
+
+end)
+
+--==================================================
+-- XRAY BUTTON
+--==================================================
+
+xrayBtn.MouseButton1Click:Connect(function()
+
+	buttonBounce(xrayBtn)
+
+	xray = not xray
+
+	setToggleText(
+		xrayBtn,
+		"X-Ray",
+		xray
+	)
+
+	updateAllESP()
+	updateGunESP()
+
+	showNotification(
+		xray
+		and "X-Ray enabled."
+		or "X-Ray disabled."
+	)
+
+end)
+
+--==================================================
+-- NOTIFY BUTTON
+--==================================================
+
+notifyGunBtn.MouseButton1Click:Connect(function()
+
+	buttonBounce(notifyGunBtn)
+
+	notifyGunDropped =
+		not notifyGunDropped
+
+	setToggleText(
+		notifyGunBtn,
+		"Notify When Gun Dropped",
+		notifyGunDropped
+	)
+
+	showNotification(
+		notifyGunDropped
+		and "Gun-drop notifications enabled."
+		or "Gun-drop notifications disabled."
+	)
+
+end)
+
+--==================================================
+-- AIM LOCK
+--==================================================
+
+local function getClosestTarget()
+
+	local camera =
+		workspace.CurrentCamera
+
+	if not camera then
+		return nil
+	end
+
+	local center = Vector2.new(
+		camera.ViewportSize.X / 2,
+		camera.ViewportSize.Y / 2
+	)
+
+	local closest = nil
+	local closestDistance = math.huge
+
+	for _,player in ipairs(
+		Players:GetPlayers()
+	) do
+
+		if player ~= plr
+			and player.Character then
+
+			local humanoid =
+				player.Character:
+				FindFirstChildOfClass("Humanoid")
+
+			local head =
+				player.Character:
+				FindFirstChild("Head")
+
+			if humanoid
+				and humanoid.Health > 0
+				and head then
+
+				local position,visible =
+					camera:WorldToViewportPoint(
+						head.Position
+					)
+
+				if visible
+					and position.Z > 0 then
+
+					local distance =
+						(
+							Vector2.new(
+								position.X,
+								position.Y
+							) - center
+						).Magnitude
+
+					if distance <
+						closestDistance then
+
+						closestDistance =
+							distance
+
+						closest =
+							player
+
+					end
+				end
+			end
+		end
+	end
+
+	return closest
+end
+
+aimBtn.MouseButton1Click:Connect(function()
+
+	buttonBounce(aimBtn)
+
+	lockOn = not lockOn
+
+	setToggleText(
+		aimBtn,
+		"Aim Lock",
+		lockOn
+	)
+
+	if not lockOn then
+		target = nil
+	end
+
+	showNotification(
+		lockOn
+		and "Aim Lock enabled."
+		or "Aim Lock disabled."
+	)
+
+end)
+
+RunService:BindToRenderStep(
+	"MarquisAimLock",
+	Enum.RenderPriority.Camera.Value + 1,
+	function()
+
+		if not lockOn then
+			return
+		end
+
+		target =
+			getClosestTarget()
+
+		if not target then
+			return
+		end
+
+		local character =
+			target.Character
+
+		if not character then
+			return
+		end
+
+		local head =
+			character:FindFirstChild("Head")
+
+		local camera =
+			workspace.CurrentCamera
+
+		if head and camera then
+
+			camera.CFrame =
+				CFrame.lookAt(
+					camera.CFrame.Position,
+					head.Position
+				)
+
+		end
+	end
+)
+
+--==================================================
+-- GET DROPPED GUN
+--==================================================
+
+local gunTeleporting = false
+
+gunBtn.MouseButton1Click:Connect(function()
+
+	if gunTeleporting then
+		return
+	end
+
+	local gun =
+		workspace:FindFirstChild(
+			"GunDrop",
+			true
+		)
+
+	if not gun then
+
+		buttonBounce(gunBtn)
+
+		showNotification(
+			"No dropped gun found."
+		)
+
+		return
+	end
+
+	local character =
+		plr.Character
+
+	if not character then
+		return
+	end
+
+	local root =
+		character:FindFirstChild(
+			"HumanoidRootPart"
+		)
+
+	if not root then
+		return
+	end
+
+	local gunPart
+
+	if gun:IsA("BasePart") then
+
+		gunPart = gun
+
+	else
+
+		gunPart =
+			gun:FindFirstChildWhichIsA(
+				"BasePart",
+				true
+			)
+
+	end
+
+	if not gunPart then
+
+		showNotification(
+			"Could not find the gun part."
+		)
+
+		return
+	end
+
+	buttonBounce(gunBtn)
+
+	local originalCFrame =
+		root.CFrame
+
+	gunTeleporting = true
+	gunBtn.Text = "Getting Gun..."
+
+	showNotification(
+		"Teleporting to dropped gun..."
+	)
+
+	root.CFrame =
+		gunPart.CFrame +
+		Vector3.new(0,3,0)
+
+	task.wait(.5)
+
+	if root
+		and root.Parent
+		and character
+		and character.Parent then
+
+		root.CFrame =
+			originalCFrame
+
+	end
+
+	gunBtn.Text =
+		"Get Dropped Gun"
+
+	gunTeleporting = false
+
+	showNotification(
+		"Returned to your original position."
+	)
+
+end)
+
+--==================================================
+-- GUN DROP DETECTOR
+--==================================================
+
+local gunWasPresent = false
+
+local function checkGunDrop()
+
+	local gun =
+		workspace:FindFirstChild(
+			"GunDrop",
+			true
+		)
+
+	if gun then
+
+		if not gunWasPresent then
+
+			gunWasPresent = true
+
+			if esp then
+				updateGunESP()
+			end
+
+			if notifyGunDropped then
+
+				showNotification(
+					"Gun dropped"
+				)
+
+			end
+		end
+
+	else
+
+		gunWasPresent = false
+
+		clearGunESP()
+
+	end
+
+	if esp and gun and gun ~= lastGun then
+		updateGunESP()
+	end
+
+end
+
+RunService.Heartbeat:Connect(
+	checkGunDrop
+)
+
+--==================================================
+-- PLAYER CARD
+--==================================================
+
+local playerCard =
+	Instance.new("Frame")
+
+playerCard.Size =
+	UDim2.fromOffset(195,54)
+
+playerCard.Position =
+	UDim2.new(1,-210,1,-69)
+
+playerCard.BackgroundColor3 =
+	Color3.fromRGB(7,24,58)
+
+playerCard.BorderSizePixel = 0
+playerCard.Parent = gui
+
+local cardCorner =
+	Instance.new("UICorner")
+
+cardCorner.CornerRadius =
+	UDim.new(0,9)
+
+cardCorner.Parent = playerCard
+
+local cardStroke =
+	Instance.new("UIStroke")
+
+cardStroke.Color =
+	Color3.fromRGB(90,155,255)
+
+cardStroke.Transparency = .25
+cardStroke.Thickness = 1.5
+cardStroke.ApplyStrokeMode =
+	Enum.ApplyStrokeMode.Border
+
+cardStroke.Parent = playerCard
+
+local avatar =
+	Instance.new("ImageLabel")
+
+avatar.Size =
+	UDim2.fromOffset(38,38)
+
+avatar.Position =
+	UDim2.fromOffset(8,8)
+
+avatar.BackgroundColor3 =
+	Color3.fromRGB(15,48,100)
+
+avatar.BorderSizePixel = 0
+avatar.Parent = playerCard
+
+local avatarCorner =
+	Instance.new("UICorner")
+
+avatarCorner.CornerRadius =
+	UDim.new(1,0)
+
+avatarCorner.Parent = avatar
+
+local username =
+	Instance.new("TextLabel")
+
+username.Size =
+	UDim2.new(1,-58,0,22)
+
+username.Position =
+	UDim2.fromOffset(53,7)
+
+username.BackgroundTransparency = 1
+username.Text = plr.Name
+
+username.TextColor3 =
+	Color3.new(1,1,1)
+
+username.TextSize = 13
+username.Font =
+	Enum.Font.GothamBold
+
+username.TextXAlignment =
+	Enum.TextXAlignment.Left
+
+username.TextTruncate =
+	Enum.TextTruncate.AtEnd
+
+username.Parent = playerCard
+
+local executorText =
+	Instance.new("TextLabel")
+
+executorText.Size =
+	UDim2.new(1,-58,0,18)
+
+executorText.Position =
+	UDim2.fromOffset(53,28)
+
+executorText.BackgroundTransparency = 1
+executorText.Text = "CURRENT PLAYER"
+
+executorText.TextColor3 =
+	Color3.fromRGB(150,185,235)
+
+executorText.TextSize = 9
+executorText.Font =
+	Enum.Font.GothamMedium
+
+executorText.TextXAlignment =
+	Enum.TextXAlignment.Left
+
+executorText.Parent = playerCard
+
+--==================================================
+-- AVATAR
+--==================================================
+
+task.spawn(function()
+
+	local success,content,isReady =
+		pcall(function()
+
+			return Players:GetUserThumbnailAsync(
+				plr.UserId,
+				Enum.ThumbnailType.HeadShot,
+				Enum.ThumbnailSize.Size100x100
+			)
+
+		end)
+
+	if success and isReady then
+		avatar.Image = content
+	end
+
+end)
+
+--==================================================
+-- MM2 CIRCLE
+--==================================================
+
+local toggle =
+	Instance.new("TextButton")
+
+toggle.Size =
+	UDim2.fromOffset(52,52)
+
+toggle.Position =
+	UDim2.fromScale(.05,.12)
+
+toggle.Text = "MM2"
+
+toggle.TextColor3 =
+	Color3.new(1,1,1)
+
+toggle.TextSize = 12
+toggle.Font =
+	Enum.Font.GothamBold
+
+toggle.BackgroundColor3 =
+	Color3.fromRGB(15,75,165)
+
+toggle.BorderSizePixel = 0
+toggle.AutoButtonColor = false
+toggle.Active = true
+toggle.ZIndex = 50
+toggle.Parent = gui
+
+local toggleCorner =
+	Instance.new("UICorner")
+
+toggleCorner.CornerRadius =
+	UDim.new(1,0)
+
+toggleCorner.Parent = toggle
+
+--==================================================
+-- MM2 CIRCLE OUTLINE
+--==================================================
+
+local toggleOutline =
+	Instance.new("UIStroke")
+
+toggleOutline.Name =
+	"MM2Outline"
+
+toggleOutline.Color =
+	Color3.fromRGB(0,0,0)
+
+toggleOutline.Thickness = 3
+toggleOutline.Transparency = 0
+
+toggleOutline.ApplyStrokeMode =
+	Enum.ApplyStrokeMode.Border
+
+toggleOutline.Parent = toggle
+
+--==================================================
+-- MM2 HOVER
+--==================================================
+
+toggle.MouseEnter:Connect(function()
+
+	TweenService:Create(
+		toggle,
+		TweenInfo.new(.15),
+		{
+			BackgroundColor3 =
+				Color3.fromRGB(25,95,195)
+		}
+	):Play()
+
+end)
+
+toggle.MouseLeave:Connect(function()
+
+	TweenService:Create(
+		toggle,
+		TweenInfo.new(.15),
+		{
+			BackgroundColor3 =
+				Color3.fromRGB(15,75,165)
+		}
+	):Play()
+
+end)
+
+--==================================================
+-- MM2 CLICK
+--==================================================
+
+toggle.MouseButton1Click:Connect(function()
+
+	local originalSize =
+		toggle.Size
+
+	local shrink =
+		TweenService:Create(
+			toggle,
+			TweenInfo.new(
+				.07,
+				Enum.EasingStyle.Quad,
+				Enum.EasingDirection.Out
+			),
+			{
+				Size =
+					UDim2.fromOffset(46,46)
+			}
+		)
+
+	local bounce =
+		TweenService:Create(
+			toggle,
+			TweenInfo.new(
+				.22,
+				Enum.EasingStyle.Back,
+				Enum.EasingDirection.Out
+			),
+			{
+				Size = originalSize
+			}
+		)
+
+	shrink:Play()
+
+	shrink.Completed:Once(function()
+		bounce:Play()
+	end)
+
+	menu.Visible =
+		not menu.Visible
+
+end)
+
+--==================================================
+-- DRAGGING
+--==================================================
+
+local function makeDraggable(handle,object)
+
+	local dragging = false
+	local dragStart
+	local startPosition
+
+	handle.InputBegan:Connect(function(input)
+
+		if input.UserInputType ==
+			Enum.UserInputType.MouseButton1
+			or input.UserInputType ==
+			Enum.UserInputType.Touch then
+
+			dragging = true
+			dragStart = input.Position
+			startPosition = object.Position
+
+		end
+	end)
+
+	UIS.InputChanged:Connect(function(input)
+
+		if not dragging then
+			return
+		end
+
+		if input.UserInputType ==
+			Enum.UserInputType.MouseMovement
+			or input.UserInputType ==
+			Enum.UserInputType.Touch then
+
+			local delta =
+				input.Position -
+				dragStart
+
+			object.Position =
+				UDim2.new(
+
+					startPosition.X.Scale,
+					startPosition.X.Offset + delta.X,
+
+					startPosition.Y.Scale,
+					startPosition.Y.Offset + delta.Y
+
+				)
+
+		end
+
+	end)
+
+	UIS.InputEnded:Connect(function(input)
+
+		if input.UserInputType ==
+			Enum.UserInputType.MouseButton1
+			or input.UserInputType ==
+			Enum.UserInputType.Touch then
+
+			dragging = false
+
+		end
+
+	end)
+
+end
+
+makeDraggable(top,menu)
+makeDraggable(toggle,toggle)
+
+--==================================================
+-- PLAYER CONNECTIONS
+--==================================================
+
+local function connectPlayer(player)
+
+	player.CharacterAdded:Connect(function()
+
+		task.wait(.5)
+
+		updateESP(player)
+
+	end)
+
+end
+
+for _,player in ipairs(
+	Players:GetPlayers()
+) do
+
+	if player ~= plr then
+		connectPlayer(player)
+	end
+
+end
+
+Players.PlayerAdded:Connect(function(player)
+
+	connectPlayer(player)
+
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+
+	clearESP(player)
+
+	if target == player then
+		target = nil
+	end
+
+end)
+
+--==================================================
+-- RIGHT SHIFT
+--==================================================
+
+UIS.InputBegan:Connect(function(
+	input,
+	processed
+)
+
+	if processed then
+		return
+	end
+
+	if input.KeyCode ==
+		Enum.KeyCode.RightShift then
+
+		menu.Visible =
+			not menu.Visible
+
+	end
+
+end)
